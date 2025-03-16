@@ -116,10 +116,21 @@ class DirectoryManagementApp(QMainWindow):
         if not self.selected_directory:
             self.label.setText("Error: Please select a directory first.")
             return
-        manager = AIDirectoryManager(self.selected_directory)
-        manager.scan_directory()
-        manager.organize_files()
-        self.label.setText("Files have been organized successfully.")
+        # For error handling for permissions or locked files
+        try:
+            manager = AIDirectoryManager(self.selected_directory)
+            scan_errors = manager.scan_directory()
+            organize_errors = manager.organize_files()
+            all_errors = scan_errors + organize_errors
+            if all_errors:
+                error_msg = "Organized with issues:\n" + "\n".join(all_errors[:5])  # Limit to 5 errors for brevity
+                self.label.setText(error_msg)
+            else:
+                self.label.setText("Files have been organized successfully.")
+        except RuntimeError as e:
+            self.label.setText(f"Error: {e}")
+        except Exception as e:
+            self.label.setText(f"Unexpected error: {e}")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
