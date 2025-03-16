@@ -93,6 +93,8 @@ class DirectoryManagementApp(QMainWindow):
         container = QWidget()
         container.setLayout(layout)
         self.setCentralWidget(container)
+        self.setAcceptDrops(True) #commit 1 enable drag and drop
+        
     
     def select_directory(self):
         self.selected_directory = QFileDialog.getExistingDirectory(self, "Select Directory")
