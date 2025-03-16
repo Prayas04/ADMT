@@ -34,6 +34,17 @@ class AIDirectoryManager:
             hasher.update(buf)
         return hasher.hexdigest()
 
+    def create_backup(self):
+        if not os.path.exists(self.backup_path):
+            os.makedirs(self.backup_path)
+        for root, _, files in os.walk(self.base_path):
+            for file in files:
+                filepath = os.path.join(root, file)
+                rel_path = os.path.relpath(filepath, self.base_path)
+                backup_filepath = os.path.join(self.backup_path, rel_path)
+                os.makedirs(os.path.dirname(backup_filepath), exist_ok=True)
+                shutil.copy2(filepath, backup_filepath)
+
     def scan_directory(self):
         for root, _, files in os.walk(self.base_path):
             for file in files:
