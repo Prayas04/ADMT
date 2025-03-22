@@ -73,6 +73,10 @@ class AIDirectoryManager:
             os.makedirs(category_path, exist_ok=True)
             shutil.move(filepath, os.path.join(category_path, filename))
 
+    def search_files(self, keyword):
+        self.cursor.execute("SELECT filename, filepath FROM files WHERE filename LIKE ?", (f"%{keyword}%",))
+        return self.cursor.fetchall()
+
 class DirectoryManagementApp(QMainWindow):
     def __init__(self):
         super().__init__()
