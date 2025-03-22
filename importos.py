@@ -77,6 +77,17 @@ class AIDirectoryManager:
         self.cursor.execute("SELECT filename, filepath FROM files WHERE filename LIKE ?", (f"%{keyword}%",))
         return self.cursor.fetchall()
 
+    def create_backup(self):
+    backup_dir = os.path.join(self.base_path, "backup")
+    os.makedirs(backup_dir, exist_ok=True)
+    for root, _, files in os.walk(self.base_path):
+        for file in files:
+            filepath = os.path.join(root, file)
+            rel_path = os.path.relpath(filepath, self.base_path)
+            backup_filepath = os.path.join(backup_dir, rel_path)
+            os.makedirs(os.path.dirname(backup_filepath), exist_ok=True)
+            shutil.copy2(filepath, backup_filepath)
+
 class DirectoryManagementApp(QMainWindow):
     def __init__(self):
         super().__init__()
