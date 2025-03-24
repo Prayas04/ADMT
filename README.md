@@ -50,16 +50,11 @@ Allows users to modify or extend file categorization based on specific needs.
 Ensure you have Python installed. If not, download it from [Python’s official website](https://www.python.org/downloads/).
 
 ### 📌 Installation Steps
-1. Clone the repository:
-   ```sh
-   git clone https://github.com/your-repo/AI-Directory-Manager.git
-   cd AI-Directory-Manager
-   ```
-2. Install dependencies:
+1. Install dependencies:
    ```sh
    pip install PyQt5 numpy pandas scikit-learn torch (or tensorflow, depending on the AI model) os shutil
    ```
-3. Run the application:
+2. Run the application:
    ```sh
    python main.py
    ```
