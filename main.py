@@ -12,6 +12,10 @@ from PyQt5.QtGui import QFont
 from PyQt5.QtCore import Qt, QSize, QPropertyAnimation, QThread, pyqtSignal
 from qdarkstyle import load_stylesheet
 
+
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.naive_bayes import MultinomialNB
+
 class FileWorker(QThread):
     progress = pyqtSignal(int)
     finished = pyqtSignal()
@@ -22,6 +26,7 @@ class FileWorker(QThread):
         self.directories = directories
         self.running = True
         self.executor = ThreadPoolExecutor(max_workers=os.cpu_count() * 2)
+        self.classifier, self.vectorizer = self.train_classifier()
 
     def run(self):
         try:
@@ -78,7 +83,7 @@ class FileWorker(QThread):
                 conn.close()
                 return
 
-            category = self.classify_file(os.path.basename(file_path))
+            category = self.ai_classify_file(os.path.basename(file_path))
             target_dir = os.path.join(organized_root, category)
             os.makedirs(target_dir, exist_ok=True)
 
@@ -96,29 +101,43 @@ class FileWorker(QThread):
             hasher.update(f.read(1024 * 1024))  # Hash first 1MB for speed
         return hasher.hexdigest()
 
-    def classify_file(self, filename):
-        ext = os.path.splitext(filename)[1][1:].lower()
-        categories = {
-            'Documents': {'doc', 'docx', 'pdf', 'txt', 'rtf', 'odt', 'xls', 'xlsx', 'ppt', 'pptx'},
-            'Images': {'jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg', 'webp', 'tiff'},
-            'Media': {'mp4', 'mov', 'avi', 'mkv', 'mp3', 'wav', 'flac', 'aac', 'wma'},
-            'Code': {'py', 'js', 'html', 'css', 'java', 'cpp', 'c', 'h', 'php', 'rb'},
-            'Archives': {'zip', 'rar', 'tar', 'gz', '7z', 'bz2'},
-            'Executables': {'exe', 'dmg', 'app', 'msi', 'deb'},
-            'Data': {'csv', 'json', 'xml', 'db', 'sql', 'dat'}
-        }
+    def ai_classify_file(self, filename):
+        categories = ["Documents", "Images", "Media", "Code", "Archives", "Executables", "Data", "Other"]
+        filename_vectorized = self.vectorizer.transform([filename])
+        prediction = self.classifier.predict(filename_vectorized)[0]
+        return categories[prediction]
+
+    def train_classifier(self):
+        categories = ["Documents", "Images", "Media", "Code", "Archives", "Executables", "Data", "Other"]
+        training_data = [
+            "report.docx", "invoice.pdf", "notes.txt", "presentation.pptx", "spreadsheet.xlsx", "manual.odt",  # Documents
+            "photo.jpg", "graphic.png", "wallpaper.jpeg", "illustration.bmp", "vector.svg", "screenshot.tiff",  # Images
+            "movie.mp4", "song.mp3", "podcast.wav", "video.mkv", "audio.aac", "clip.flac",  # Media
+            "script.py", "index.html", "main.cpp", "program.java", "source.cs", "module.js", "class.ts",  # Code
+            "backup.zip", "archive.rar", "compressed.7z", "package.tar", "gzip.gz", "bzipped.bz2",  # Archives
+            "installer.exe", "app.dmg", "setup.msi", "binary.bin", "runnable.out", "software.pkg",  # Executables
+            "database.db", "data.csv", "config.json", "settings.xml", "metadata.yaml", "spreadsheet.xls",  # Data
+            "randomfile.xyz", "misc.unknown", "undefined.tmp"  # Other
+        ]
+        labels = [0, 0, 0, 0, 0, 0,  # Documents
+                  1, 1, 1, 1, 1, 1,  # Images
+                  2, 2, 2, 2, 2, 2,  # Media
+                  3, 3, 3, 3, 3, 3, 3,  # Code
+                  4, 4, 4, 4, 4, 4,  # Archives
+                  5, 5, 5, 5, 5, 5,  # Executables
+                  6, 6, 6, 6, 6, 6,  # Data
+                  7, 7, 7]  # Other
         
-        for category, exts in categories.items():
-            if ext in exts:
-                return category
-        
-        return 'Other'
+        vectorizer = CountVectorizer()
+        training_vectors = vectorizer.fit_transform(training_data)
+        classifier = MultinomialNB()
+        classifier.fit(training_vectors, labels)
+        return classifier, vectorizer
 
     def stop(self):
         self.running = False
         self.executor.shutdown(wait=False)
-
-
+        
 class AIDirectoryManager(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -345,6 +364,15 @@ class AIDirectoryManager(QMainWindow):
         msg.setText(message)
         msg.setIcon(icon)
         msg.show()
+
+    def update_directory_table(self):
+        # Clear the table
+        self.table.setRowCount(0)
+
+        # Populate the table with the selected directories
+        for row, directory in enumerate(self.selected_directories):
+            self.table.insertRow(row)
+            self.table.setItem(row, 0, QTableWidgetItem(directory))
 
     def closeEvent(self, event):
         self.cancel_processing()
