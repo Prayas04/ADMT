@@ -1,7 +1,5 @@
 # 📂 AI-Powered Directory Manager
 
-## 🏫 University-Level Project Documentation
-
 ### 🔍 Introduction
 In today's digital world, managing large volumes of files efficiently is essential. The **AI-Powered Directory Manager** is an intelligent file organization tool that leverages artificial intelligence to classify and sort files into appropriate directories. This project aims to automate the process of file management, improving productivity and organization in both academic and professional environments.
 
