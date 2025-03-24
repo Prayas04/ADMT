@@ -25,9 +25,7 @@ class FileWorker(QThread):
 
     def run(self):
         try:
-            conn = sqlite3.connect('file_records.db', check_same_thread=False)
-            cursor = conn.cursor()
-            total_files = sum(len(files) for _, _, files in (os.walk(d) for d in self.directories))
+            total_files = sum(len(files) for d in self.directories for _, _, files in os.walk(d))
             processed = 0
 
             for directory in self.directories:
@@ -44,7 +42,7 @@ class FileWorker(QThread):
                     for file in files:
                         file_path = os.path.join(root, file)
                         futures.append(self.executor.submit(
-                            self.process_file, file_path, organized_root, cursor
+                            self.process_file, file_path, organized_root
                         ))
 
                     for future in futures:
@@ -54,19 +52,21 @@ class FileWorker(QThread):
                         processed += 1
                         self.progress.emit(int((processed / total_files) * 100))
 
-            conn.commit()
-            conn.close()
             self.finished.emit()
         except Exception as e:
             self.error.emit(str(e))
 
-    def process_file(self, file_path, organized_root, cursor):
+    def process_file(self, file_path, organized_root):
         try:
+            conn = sqlite3.connect('file_records.db')
+            cursor = conn.cursor()
+            
             file_stat = os.stat(file_path)
             size_mtime = f"{file_stat.st_size}-{file_stat.st_mtime}"
             
             cursor.execute("SELECT 1 FROM files WHERE size_mtime=?", (size_mtime,))
             if cursor.fetchone():
+                conn.close()
                 return
 
             file_hash = self.quick_hash(file_path)
@@ -74,6 +74,8 @@ class FileWorker(QThread):
             if cursor.fetchone():
                 cursor.execute("INSERT INTO files (hash, path, size_mtime) VALUES (?, ?, ?)",
                               (file_hash, file_path, size_mtime))
+                conn.commit()
+                conn.close()
                 return
 
             category = self.classify_file(os.path.basename(file_path))
@@ -83,6 +85,8 @@ class FileWorker(QThread):
             shutil.move(file_path, os.path.join(target_dir, os.path.basename(file_path)))
             cursor.execute("INSERT INTO files (hash, path, size_mtime) VALUES (?, ?, ?)",
                           (file_hash, os.path.join(target_dir, os.path.basename(file_path)), size_mtime))
+            conn.commit()
+            conn.close()
         except Exception as e:
             self.error.emit(f"Error processing {file_path}: {str(e)}")
 
@@ -113,6 +117,7 @@ class FileWorker(QThread):
     def stop(self):
         self.running = False
         self.executor.shutdown(wait=False)
+
 
 class AIDirectoryManager(QMainWindow):
     def __init__(self):
@@ -152,25 +157,52 @@ class AIDirectoryManager(QMainWindow):
 
     def init_ui(self):
         main_layout = QHBoxLayout()
-        menu_layout = self.create_menu()
+        menu_container = self.create_menu()  # This returns a QFrame
         content_layout = self.create_content()
-        main_layout.addLayout(menu_layout, 1)
+
+        # Add the menu container as a widget
+        main_layout.addWidget(menu_container, 1)  # Use addWidget for QFrame
         main_layout.addLayout(content_layout, 4)
 
         container = QWidget()
         container.setLayout(main_layout)
         self.setCentralWidget(container)
 
+        # Set a futuristic background
+        self.setStyleSheet("""
+            QMainWindow {
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 1,
+                    stop: 0 #0d0d1a, stop: 1 #1e1e2f
+                );
+            }
+        """)
+
     def create_menu(self):
         menu_layout = QVBoxLayout()
         menu_layout.setAlignment(Qt.AlignTop)
         menu_layout.setContentsMargins(20, 40, 20, 40)
 
+        # Increase the spacing between buttons
+        menu_layout.setSpacing(20)
+
+        # Create a container for the menu with a distinct background
+        menu_container = QFrame()
+        menu_container.setStyleSheet("""
+            QFrame {
+                background-color: #1e1e2f;
+                border-radius: 15px;
+                border: 2px solid #00ffcc;
+            }
+        """)
+        menu_container.setLayout(menu_layout)
+
         buttons = [
-            ("Add Directories", self.add_directories),
-            ("Organize Files", self.start_processing),
-            ("Cancel", self.cancel_processing),
-            ("Exit", self.close)
+            ("➕ Add Directories", self.add_directories),
+            ("🗑️ Remove Directory", self.remove_selected_directory),
+            ("⚙️ Organize Files", self.start_processing),
+            ("❌ Cancel", self.cancel_processing),
+            ("🚪 Exit", self.close)
         ]
 
         for text, handler in buttons:
@@ -180,21 +212,62 @@ class AIDirectoryManager(QMainWindow):
             btn.setFixedHeight(50)
             menu_layout.addWidget(btn)
 
-        return menu_layout
+        return menu_container
 
     def create_content(self):
         content_layout = QVBoxLayout()
-        self.title = QLabel("AI Directory Organizer")
-        self.title.setStyleSheet("font-size: 24pt; font-weight: bold;")
+
+        # Title with futuristic font
+        self.title = QLabel("AI Directory Manager")
+        self.title.setStyleSheet("""
+            font-size: 28pt;
+            font-weight: bold;
+            color: #00ffcc;
+            font-family: Orbitron, sans-serif;
+            margin-bottom: 20px;
+        """)
+        self.title.setAlignment(Qt.AlignCenter)
         content_layout.addWidget(self.title)
 
+        # Directory table with futuristic styling
         self.table = QTableWidget(0, 1)
         self.table.setHorizontalHeaderLabels(["Selected Directories"])
         self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.setStyleSheet("""
+            QTableWidget {
+                background-color: #1e1e2f;
+                color: #00ffcc;
+                font-size: 14pt;
+                font-family: Orbitron, sans-serif;
+                border: 2px solid #00ffcc;
+                border-radius: 10px;
+            }
+            QHeaderView::section {
+                background-color: #3a3a5f;
+                color: #ffffff;
+                font-size: 12pt;
+                font-family: Orbitron, sans-serif;
+                border: 1px solid #00ffcc;
+            }
+        """)
         content_layout.addWidget(self.table)
 
+        # Progress bar with futuristic styling
         self.progress = QProgressBar()
-        self.progress.setStyleSheet("QProgressBar { height: 25px; }")
+        self.progress.setStyleSheet("""
+            QProgressBar {
+                background-color: #1e1e2f;
+                border: 2px solid #00ffcc;
+                border-radius: 10px;
+                text-align: center;
+                color: #00ffcc;
+                font-family: Orbitron, sans-serif;
+            }
+            QProgressBar::chunk {
+                background-color: #00ffcc;
+                border-radius: 10px;
+            }
+        """)
         content_layout.addWidget(self.progress)
 
         return content_layout
@@ -202,22 +275,44 @@ class AIDirectoryManager(QMainWindow):
     def button_style(self):
         return """
             QPushButton {
-                font-size: 14pt;
-                padding: 10px;
-                border-radius: 5px;
-                background: #444;
+                font-size: 16pt;
+                padding: 13px;
+                border-radius: 10px;
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 1,
+                    stop: 0 #2d2d44, stop: 1 #3a3a5f
+                );
+                color: #00ffcc;
+                font-family: Orbitron, sans-serif;
             }
             QPushButton:hover {
-                background: #666;
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 1,
+                    stop: 0 #3a3a5f, stop: 1 #2d2d44
+                );
+                color: #ffffff;
+                border: 2px solid #ffffff;
+            }
+            QPushButton:pressed {
+                background-color: #00ffcc;
+                color: #1e1e2f;
             }
         """
 
     def add_directories(self):
         if directory := QFileDialog.getExistingDirectory(self, "Select Directory"):
             self.selected_directories.append(directory)
-            self.table.setRowCount(len(self.selected_directories))
-            for row, dir in enumerate(self.selected_directories):
-                self.table.setItem(row, 0, QTableWidgetItem(dir))
+            self.update_directory_table()
+
+    def remove_selected_directory(self):
+        selected_row = self.table.currentRow()
+        if selected_row == -1:
+            self.show_message("Error", "Please select a directory to remove!", QMessageBox.Critical)
+            return
+
+        # Remove the selected directory from the list and update the table
+        del self.selected_directories[selected_row]
+        self.update_directory_table()
 
     def start_processing(self):
         if not self.selected_directories:
